@@ -99,6 +99,14 @@ type TerminalActivity struct {
 }
 
 
+
+type Command struct{
+    command string 
+}
+
+
+
+
 // Program represents the service
 type Program struct {
     exit chan struct{}
@@ -771,14 +779,21 @@ func (p *Program) monitorUserBehavior(agentID string) {
 }
 
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                            //RUN COMMANDS RETRIEVE FROM SERVER 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 
 
-//Detect terminal linux 
 
 
 
+
+
+
+
+// Check what is gonna be typed on the commandline
 //audit rules to allow for checking of sudo commands 
 
 func setupAuditRules() {
@@ -834,6 +849,7 @@ func enrichCommandInfo(activity *TerminalActivity) {
     activity.RealUser = activity.User
     activity.User = "root"
     activity.RealCommand = parts[1]
+
     activity.Args = parts[2:]
 
    
@@ -841,6 +857,7 @@ func enrichCommandInfo(activity *TerminalActivity) {
     
     } else {
         activity.Command = parts[0]
+        print(activity.Command)
         activity.Args = parts[1:]
     }
 
@@ -855,7 +872,6 @@ func enrichCommandInfo(activity *TerminalActivity) {
             break
         }
     }
-
 }
 
 
@@ -931,9 +947,10 @@ func processcommand(line string) *TerminalActivity  {
 func (p *Program) detecterminal (agentID string) {
 
 
-//    setupAuditRules()
+    setupAuditRules()
 
-    cmd := exec.Command("ausearch", "-k","commands","-i")
+    cmd := exec.Command("ausearch", "-k", "command_edr", "--start", "recent")
+
 
 
 
@@ -998,6 +1015,10 @@ func sendLog(log Log) {
         fmt.Printf("Server response: %s\n", string(body))
     }
 }
+
+
+
+
 
 
 

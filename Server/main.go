@@ -62,6 +62,10 @@ func main() {
 	// Setting up routes for logs
 	r.GET("/logs", controllers.Showlogs)
 	r.POST("/logs", controllers.StoreLogs)
+	r.GET("/command",controllers.ShowCommands)
+	r.POST("/command",controllers.StoreCommands)
+
+
 
 	r.Run(":8080") // Start the server on port 8080
 }
