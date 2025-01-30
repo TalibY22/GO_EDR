@@ -49,3 +49,41 @@ func StoreCommands (c* gin.Context) {
 
 
 
+func RecieveOutput ( c * gin.Context ) {
+
+	var input models.Output  
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest,gin.H{"error": err.Error()})
+		return
+	} 
+
+    output := models.Output{
+          AgentID: input.AgentID,
+		  Given_command: input.Given_command,
+		  Output: input.Output,
+	}
+
+	if err := models.DB.Create(&output).Error; err != nil {
+		c.JSON(http.StatusInternalServerError,gin.H{"error":err.Error()})
+		return
+	}
+
+	models.DB.Create(&output)
+
+	c.JSON(http.StatusOK,gin.H{"message" : "output recieved"})
+}  
+
+
+func ShowOutput (c * gin.Context) {
+
+	var outputs []models.Output
+    
+	models.DB.Find(&outputs)
+
+	c.JSON(http.StatusOK,gin.H{"data":outputs})
+
+}
+
+
+

@@ -14,3 +14,10 @@ type CreateCommand struct {
 }
 
 
+type Output struct {
+
+	Id uint `json:"id" gorm:"primary_key"`
+	AgentID  string  `json:"agent_id" binding:"required"`
+	Given_command string  `json:"given_command" `
+    Output string `json:"output" binding:"required"` 
+}

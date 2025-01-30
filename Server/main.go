@@ -36,11 +36,11 @@ func setupRouter() *gin.Engine {
 		"manu": "123", // user:manu password:123
 	}))
 
-	// Authorized POST example
+	
 	authorized.POST("admin", func(c *gin.Context) {
 		user := c.MustGet(gin.AuthUserKey).(string)
 
-		// Parse JSON
+		
 		var json struct {
 			Value string `json:"value" binding:"required"`
 		}
@@ -54,18 +54,27 @@ func setupRouter() *gin.Engine {
 	return r
 }
 
+
+
+
+
 func main() {
 	r := setupRouter()
 
-	models.OpendDB() // Assuming this opens a database connection or similar
+	models.OpendDB() 
 
-	// Setting up routes for logs
+	
 	r.GET("/logs", controllers.Showlogs)
 	r.POST("/logs", controllers.StoreLogs)
 	r.GET("/command",controllers.ShowCommands)
 	r.POST("/command",controllers.StoreCommands)
+	r.POST("/output",controllers.RecieveOutput)
+	r.GET("/output",controllers.ShowOutput)
+
+
+	
 
 
 
-	r.Run(":8080") // Start the server on port 8080
+	r.Run(":8080") 
 }

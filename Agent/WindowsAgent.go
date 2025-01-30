@@ -1,21 +1,4 @@
 
-
-
-
-
-
-
-
-///NEED TO CREATE A AGENT FOR WINDOWS 
-
-
-
-
-
-
-
-
-
 func windowslogin(agentid string,lastcheck time.Time) {
 
 

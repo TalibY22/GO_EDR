@@ -21,7 +21,7 @@ func OpendDB(){
 	}
 
 
-	err = database.AutoMigrate(&Log{},&Command{})
+	err = database.AutoMigrate(&Log{},&Command{},&Output{})
 
 	if err != nil{
 

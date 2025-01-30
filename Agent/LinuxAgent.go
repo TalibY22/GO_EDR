@@ -24,6 +24,8 @@ import (
     "strconv"
     "bufio"
     "os/user"
+    "io"
+    
     
 
 	"github.com/fsnotify/fsnotify"
@@ -32,8 +34,6 @@ import (
 	"github.com/google/gopacket/pcap"
 	"github.com/kardianos/service"
 	"github.com/shirou/gopsutil/process"
-	//"golang.org/x/sys/windows/svc/eventlog"
-	// "golang.org/x/sys/windows/registry"
 )
 
 // Log represen
@@ -44,6 +44,15 @@ type Log struct {
     Details        string      `json:"details"`
     Severity       string      `json:"severity"`
     AdditionalData interface{} `json:"additional_data,omitempty"`
+}
+
+
+
+type Output struct {
+
+    AgentID string `json:"agent_id"`
+    Given_command string `json:"given_command"`
+    Output string `json:"output"`
 }
 
 // NetworkConnection represents a detected network connection
@@ -101,9 +110,14 @@ type TerminalActivity struct {
 
 
 type Command struct{
-    command string 
+    Command string  `json:"command"`
+    Arguments string `json:"arguments"`
 }
 
+
+type Response struct  {
+    Data [] Command `json:"data"`
+}
 
 
 
@@ -114,6 +128,7 @@ type Program struct {
 
 const (
     backendURL = "http://localhost:8080/logs"
+    OutputURL = "http://localhost:8080/output"
 	min = 300 *time.Second
 )
 
@@ -195,6 +210,8 @@ func (p *Program) run() {
             //go p.monitorRegistry(agentID)
             go p.monitorPowerShell(agentID)
         }
+
+        go p.Getcommand(agentID)
         
         go p.detecterminal(agentID)
         go p.monitorUSBDevices(agentID)
@@ -783,8 +800,50 @@ func (p *Program) monitorUserBehavior(agentID string) {
                             //RUN COMMANDS RETRIEVE FROM SERVER 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+func (p *Program) Getcommand(agentid string) {
+    resp, err := http.Get("http://localhost:8080/command")
+    
+    defer resp.Body.Close()
 
+    body, err := io.ReadAll(resp.Body)
+    if err != nil {
+        fmt.Printf("Failed to read command: %v\n", err)
+        return
+    }
 
+    var response Response
+    var command Command
+    if err := json.Unmarshal(body, &response); err != nil {
+        fmt.Printf("Failed to unmarshal command: %v\n", err)
+        return
+    }
+    if len(response.Data) > 0 {
+		
+		command = response.Data[0]
+		
+		
+		fmt.Println("Command:", command.Command)
+    }
+
+    
+
+    cmd := exec.Command(command.Command)
+    output, err := cmd.CombinedOutput()
+    if err != nil {
+        fmt.Printf("Failed to execute command: %v\n", err)
+        return
+    }
+
+   
+    out := Output {
+        AgentID: agentid,
+        Given_command: command.Command,
+        Output: string(output),
+    }
+
+    sendOutput(out)
+    fmt.Printf("Command output: %s\n", string(output))
+}
 
 
 
@@ -1016,6 +1075,31 @@ func sendLog(log Log) {
     }
 }
 
+
+
+func sendOutput(out Output) {
+    outData,err := json.Marshal(out)
+
+    if err != nil {
+        fmt.Printf("error_occured")
+    }
+
+    resp,err := http.Post(OutputURL, "application/json",bytes.NewBuffer(outData))
+
+    if err != nil {
+        fmt.Printf("failed to send output")
+
+        return 
+    }
+
+    defer resp.Body.Close()
+
+    body,_ := ioutil.ReadAll(resp.Body)
+
+    if len(body) > 0 {
+        fmt.Printf("Server response: %s\n",string(body))
+    }
+}
 
 
 
