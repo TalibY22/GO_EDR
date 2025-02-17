@@ -17,7 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
+	
 	"runtime"
 	"strings"
 	"time"
@@ -200,20 +200,13 @@ func (p *Program) run() {
 
     // Start all monitoring functions
     if runtime.GOOS == "windows" || runtime.GOOS == "linux" {
-        go monitorFiles(agentID, getDownloadsPath())
-		fmt.Printf(getDownloadsPath())
-        go monitorFiles(agentID, getDesktopPath())
+        go monitorFiles(agentID, get_paths(1))
+		fmt.Printf(get_paths(1))
+        go monitorFiles(agentID, get_paths(2))
      //  go p.monitorProcesses(agentID)
         //go p.monitorNetworkConnections(agentID)
         go p.monitorDNS(agentID)
-        
-        if runtime.GOOS == "windows" {
-            //go p.monitorRegistry(agentID)
-            go p.monitorPowerShell(agentID)
-        }
-
         go p.Getcommand(agentID)
-        
         go p.detecterminal(agentID)
         go p.monitorUSBDevices(agentID)
         go p.detectSuspiciousProcesses(agentID)
@@ -493,74 +486,11 @@ func (p *Program) monitorDNS(agentID string) {
     }
 }
 
-// PowerShell Monitoring Functions
-func (p *Program) monitorPowerShell(agentID string) {
-    if runtime.GOOS != "windows" {
-        return
-    }
 
-    setupScript := `
-    $LogPath = "$env:USERPROFILE\AppData\Local\PowerShellLogs"
-    if (-not (Test-Path $LogPath)) {
-        New-Item -ItemType Directory -Path $LogPath
-    }
-    Start-Transcript -Path "$LogPath\powershell_transcript.txt" -Append
-    Enable-PSScriptBlockLogging
-    `
-
-    cmd := exec.Command("powershell", "-Command", setupScript)
-    cmd.Run()
-
-    suspiciousPatterns := []*regexp.Regexp{
-        regexp.MustCompile(`(?i)invoke-expression`),
-        regexp.MustCompile(`(?i)iex`),
-        regexp.MustCompile(`(?i)downloadstring`),
-        regexp.MustCompile(`(?i)bypass`),
-        regexp.MustCompile(`(?i)encodedcommand`),
-    }
-
-    for {
-        processes, _ := process.Processes()
-        for _, proc := range processes {
-            name, err := proc.Name()
-            if err != nil {
-                continue
-            }
-
-            if strings.ToLower(name) == "powershell.exe" {
-                cmdline, _ := proc.Cmdline()
-                username, _ := proc.Username()
-
-                for _, pattern := range suspiciousPatterns {
-                    if pattern.MatchString(cmdline) {
-                        command := PowerShellCommand{
-                            CommandLine: cmdline,
-                            User:       username,
-                            Timestamp:  time.Now(),
-                            ProcessID:  proc.Pid,
-                        }
-
-                        log := Log{
-                            AgentID:        agentID,
-                            Timestamp:      time.Now().Format(time.RFC3339),
-                            Event:          "suspicious_powershell",
-                            Details:        fmt.Sprintf("Suspicious PowerShell command from user %s", username),
-                            Severity:       "high",
-                            AdditionalData: command,
-                        }
-                        sendLog(log)
-                    }
-                }
-            }
-        }
-        time.Sleep(5 * time.Second)
-    }
-}
-
-// Registry Monitoring Functions (Windows Only)
 
 
 // Helper Functions
+
 func generateAgentID() string {
     hostname, err := os.Hostname()
     if err != nil {
@@ -569,21 +499,40 @@ func generateAgentID() string {
     return fmt.Sprintf("agent-%s", hostname)
 }
 
-func getDownloadsPath() string {
-    home, err := os.UserHomeDir()
-    if err != nil {
-        return ""
+//Combine this filepaths function
+
+
+
+//1=Downloads 2 = Desktop 
+func get_paths(pt int) string {
+
+
+
+    if pt == 1 {
+        home,err := os.UserHomeDir()
+
+        if err != nil {
+            return " "
+        }
+
+        return filepath.Join(home, "Downloads")
+    } else if pt == 2 {
+
+        home,err := os.UserHomeDir()
+
+        if err != nil {
+            return " "
+        }
+
+        return filepath.Join(home, "Desktop")
+    } else {
+        return " "
     }
-    return filepath.Join(home, "Downloads")
+
+
 }
 
-func getDesktopPath() string {
-    home, err := os.UserHomeDir()
-    if err != nil {
-        return ""
-    }
-    return filepath.Join(home, "Desktop")
-}
+
 
 func determineSeverity(event fsnotify.Event) string {
     ext := strings.ToLower(filepath.Ext(event.Name))
@@ -756,10 +705,6 @@ func (p *Program) monitorUSBDevices(agentID string) {
 func (p *Program) monitorUserBehavior(agentID string) {
     lastLoginCheck := time.Now()
     
-   // if runtime.GOOS == "windows" {
-     //   go windowslogin(agentID,lastLoginCheck)
-   // }
-
 
 
     for {
