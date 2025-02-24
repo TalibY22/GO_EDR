@@ -25,6 +25,9 @@ func ShowAgents(c* gin.Context) {
 
 func StoreAgents (c* gin.Context) {
 
+
+	
+
 	var input models.CreateAgent
 
 	//Check if a value is requied but its not in the request 

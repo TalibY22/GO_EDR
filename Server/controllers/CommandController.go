@@ -21,10 +21,11 @@ func ShowCommands(c* gin.Context) {
 }
 
 
-
+//TODO:REMOVE THE PREVIOUS COMMADS
 func StoreCommands (c* gin.Context) {
 
 	var input models.CreateCommand
+
 
 	//Check if a value is requied but its not in the request 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -35,6 +36,11 @@ func StoreCommands (c* gin.Context) {
 	command := models.Command{
 		Command: input.Command,
 		Arguments: input.Arguments,
+	}
+
+	if err := models.DB.Exec("DELETE FROM commands").Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
 
 	if err:= models.DB.Create(&command).Error; err != nil{
@@ -63,6 +69,12 @@ func RecieveOutput ( c * gin.Context ) {
 		  Given_command: input.Given_command,
 		  Output: input.Output,
 	}
+
+	if err := models.DB.Exec("DELETE FROM outputs").Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 
 	if err := models.DB.Create(&output).Error; err != nil {
 		c.JSON(http.StatusInternalServerError,gin.H{"error":err.Error()})
