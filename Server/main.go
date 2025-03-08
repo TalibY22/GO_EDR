@@ -68,7 +68,8 @@ func setupRouter() *gin.Engine {
 	r.POST("/output", controllers.RecieveOutput)
 	r.GET("/output", controllers.ShowOutput)
 	r.GET("/agents", controllers.ShowAgents)    // Fixed: GET for showing agents
-	r.POST("/agents", controllers.StoreAgents)  // Fixed: POST for storing agents
+	r.POST("/agents", controllers.StoreAgents) 
+	r.POST("/upload", controllers.StoreAgents)  // Fixed: POST for storing agents
 
 	return r
 }

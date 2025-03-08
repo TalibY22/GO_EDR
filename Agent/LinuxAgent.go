@@ -186,7 +186,7 @@ func (p *Program) run() {
 		go p.Getcommand(agentID)
 		go p.detecterminal(agentID)
 		go p.monitorUSBDevices(agentID)
-		go p.detectSuspiciousProcesses(agentID)
+		//go p.detectSuspiciousProcesses(agentID)
 		go p.monitorUserBehavior(agentID)
 	}
 
@@ -724,7 +724,7 @@ func (p *Program) Getcommand(agentid string) {
 
 			// Check for special commands
 			if command.Command == "snap" || command.Command == "screenshot" {
-				// Take a screenshot and send it
+				
 				screenshotPath, err := takeScreenshot(agentid)
 				if err != nil {
 					log.Printf("Failed to take screenshot: %v", err)
@@ -767,7 +767,7 @@ func (p *Program) Getcommand(agentid string) {
 	}
 }
 
-// takeScreenshot captures the screen and saves it to a temporary file
+
 func takeScreenshot(agentID string) (string, error) {
 	// Create a temporary file to store the screenshot
 	tmpfile, err := ioutil.TempFile("", "screenshot-*.png")
@@ -800,26 +800,26 @@ func takeScreenshot(agentID string) (string, error) {
 	return tmpfile.Name(), nil
 }
 
-// sendScreenshot sends the screenshot to the server
+//
 func sendScreenshot(agentID, screenshotPath string) error {
-	// Open the screenshot file
+
 	file, err := os.Open(screenshotPath)
 	if err != nil {
 		return fmt.Errorf("failed to open screenshot file: %v", err)
 	}
 	defer file.Close()
 
-	// Create a new multipart writer
+
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	// Add the agent ID field
+	
 	err = writer.WriteField("agent_id", agentID)
 	if err != nil {
 		return fmt.Errorf("failed to write agent ID field: %v", err)
 	}
 
-	// Add the screenshot file
+	
 	part, err := writer.CreateFormFile("screenshot", filepath.Base(screenshotPath))
 	if err != nil {
 		return fmt.Errorf("failed to create form file: %v", err)
@@ -830,14 +830,14 @@ func sendScreenshot(agentID, screenshotPath string) error {
 		return fmt.Errorf("failed to copy file to form: %v", err)
 	}
 
-	// Close the writer
+	
 	err = writer.Close()
 	if err != nil {
 		return fmt.Errorf("failed to close writer: %v", err)
 	}
 
-	// Send the request
-	req, err := http.NewRequest("POST", "http://localhost:8080/screenshot", body)
+	
+	req, err := http.NewRequest("POST", "http://localhost:8080/upload", body)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
@@ -858,8 +858,6 @@ func sendScreenshot(agentID, screenshotPath string) error {
 	return nil
 }
 
-// Check what is gonna be typed on the commandline
-//audit rules to allow for checking of sudo commands
 
 func setupAuditRules() {
 	rules := []string{
@@ -983,7 +981,7 @@ func processcommand(line string) *TerminalActivity {
 }
 
 func (p *Program) detecterminal(agentID string) {
-	// Try to use auditd if available
+	
 	if _, err := exec.LookPath("auditctl"); err == nil {
 		setupAuditRules()
 		go p.monitorAuditLogs(agentID)
@@ -1027,7 +1025,7 @@ func (p *Program) monitorAuditLogs(agentID string) {
 func (p *Program) monitorBashHistory(agentID string) {
 	cache := newEventCache()
 
-	// Get all user home directories
+	
 	homeDir := "/home"
 	dirs, err := ioutil.ReadDir(homeDir)
 	if err != nil {
