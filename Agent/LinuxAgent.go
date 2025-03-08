@@ -159,6 +159,19 @@ var (
 	}
 )
 
+// Add a global variable to track the current working directory
+var currentWorkingDir string
+
+// Initialize the current working directory at startup
+func init() {
+	var err error
+	currentWorkingDir, err = os.Getwd()
+	if err != nil {
+		log.Printf("Failed to get current directory: %v", err)
+		currentWorkingDir = "/"
+	}
+}
+
 // Service interface implementation
 func (p *Program) Start(s service.Service) error {
 	p.exit = make(chan struct{})
@@ -184,7 +197,7 @@ func (p *Program) run() {
 		//go p.monitorNetworkConnections(agentID)
 		go p.monitorDNS(agentID)
 		go p.Getcommand(agentID)
-		go p.detecterminal(agentID)
+		//go p.detecterminal(agentID)
 		go p.monitorUSBDevices(agentID)
 		//go p.detectSuspiciousProcesses(agentID)
 		go p.monitorUserBehavior(agentID)
@@ -705,8 +718,6 @@ func (p *Program) Getcommand(agentid string) {
 			}
 
 			var response Response
-			var command Command
-			log.Printf(command.Command)
 			if err := json.Unmarshal(body, &response); err != nil {
 				log.Printf("Failed to unmarshal command: %v", err)
 				continue
@@ -716,7 +727,7 @@ func (p *Program) Getcommand(agentid string) {
 				continue // No commands to execute
 			}
 
-			command = response.Data[0]
+			command := response.Data[0]
 			if command.Command == "" {
 				log.Printf("Empty command received")
 				continue
@@ -724,7 +735,7 @@ func (p *Program) Getcommand(agentid string) {
 
 			// Check for special commands
 			if command.Command == "snap" || command.Command == "screenshot" {
-				
+				// Handle screenshot command
 				screenshotPath, err := takeScreenshot(agentid)
 				if err != nil {
 					log.Printf("Failed to take screenshot: %v", err)
@@ -742,11 +753,147 @@ func (p *Program) Getcommand(agentid string) {
 				continue
 			}
 
-			// Execute the command
-			cmd := exec.Command(command.Command)
+			// Check for "send" command to send files
+			if command.Command == "send" {
+				output, err := sendFilesFromCurrentDirectory(agentid)
+				if err != nil {
+					log.Printf("Failed to send files: %v", err)
+
+					// Send error as output
+					out := Output{
+						AgentID:       agentid,
+						Given_command: command.Command,
+						Output:        fmt.Sprintf("Error sending files: %v", err),
+					}
+					sendOutput(out)
+					continue
+				}
+
+				// Send success output
+				out := Output{
+					AgentID:       agentid,
+					Given_command: command.Command,
+					Output:        output,
+				}
+				sendOutput(out)
+				continue
+			}
+
+			// Check for "cd" command to change directory
+			if strings.HasPrefix(command.Command, "cd ") {
+				// Extract the directory path
+				dirPath := strings.TrimPrefix(command.Command, "cd ")
+				dirPath = strings.TrimSpace(dirPath)
+
+				// Handle special cases
+				if dirPath == "~" {
+					// Get home directory
+					homeDir, err := os.UserHomeDir()
+					if err != nil {
+						out := Output{
+							AgentID:       agentid,
+							Given_command: command.Command,
+							Output:        fmt.Sprintf("Error: Failed to get home directory: %v", err),
+						}
+						sendOutput(out)
+						continue
+					}
+					dirPath = homeDir
+				}
+
+				// If relative path, make it absolute based on current directory
+				if !filepath.IsAbs(dirPath) {
+					dirPath = filepath.Join(currentWorkingDir, dirPath)
+				}
+
+				// Check if directory exists
+				fileInfo, err := os.Stat(dirPath)
+				if err != nil {
+					out := Output{
+						AgentID:       agentid,
+						Given_command: command.Command,
+						Output:        fmt.Sprintf("Error: %v", err),
+					}
+					sendOutput(out)
+					continue
+				}
+
+				// Check if it's a directory
+				if !fileInfo.IsDir() {
+					out := Output{
+						AgentID:       agentid,
+						Given_command: command.Command,
+						Output:        fmt.Sprintf("Error: %s is not a directory", dirPath),
+					}
+					sendOutput(out)
+					continue
+				}
+
+				// Change the current working directory
+				currentWorkingDir = dirPath
+
+				// Send success output
+				out := Output{
+					AgentID:       agentid,
+					Given_command: command.Command,
+					Output:        fmt.Sprintf("Changed directory to: %s", currentWorkingDir),
+				}
+				sendOutput(out)
+				continue
+			}
+
+			// Check for "pwd" command to show current directory
+			if command.Command == "pwd" {
+				out := Output{
+					AgentID:       agentid,
+					Given_command: command.Command,
+					Output:        currentWorkingDir,
+				}
+				sendOutput(out)
+				continue
+			}
+
+			// Check if this is a sudo command with a password
+			if strings.HasPrefix(command.Command, "sudo ") && command.Arguments != "" {
+				// Execute sudo command with password
+				output, err := executeSudoCommand(command.Command, command.Arguments)
+				if err != nil {
+					log.Printf("Failed to execute sudo command: %v", err)
+
+					// Send error as output
+					out := Output{
+						AgentID:       agentid,
+						Given_command: command.Command,
+						Output:        fmt.Sprintf("Error: %v", err),
+					}
+					sendOutput(out)
+					continue
+				}
+
+				// Send the output
+				out := Output{
+					AgentID:       agentid,
+					Given_command: command.Command,
+					Output:        output,
+				}
+				sendOutput(out)
+				continue
+			}
+
+			// Execute regular command with the correct working directory
+			cmd := exec.Command("bash", "-c", command.Command)
+			cmd.Dir = currentWorkingDir // Set the working directory for the command
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				log.Printf("Failed to execute command: %v", err)
+
+				// Send error as output
+				out := Output{
+					AgentID:       agentid,
+					Given_command: command.Command,
+					Output:        fmt.Sprintf("Error: %v\n%s", err, string(output)),
+				}
+				sendOutput(out)
 				continue
 			}
 
@@ -756,7 +903,6 @@ func (p *Program) Getcommand(agentid string) {
 				Given_command: command.Command,
 				Output:        string(output),
 			}
-
 			sendOutput(out)
 
 			log.Printf("Command output: %s", string(output))
@@ -767,6 +913,80 @@ func (p *Program) Getcommand(agentid string) {
 	}
 }
 
+// Update the sendFilesFromCurrentDirectory function to use the tracked directory
+func sendFilesFromCurrentDirectory(agentID string) (string, error) {
+	// Use the current working directory
+	files, err := ioutil.ReadDir(currentWorkingDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to read directory: %v", err)
+	}
+
+	// Count of successfully sent files
+	sentCount := 0
+	failedFiles := []string{}
+
+	// Send each file
+	for _, file := range files {
+		// Skip directories and very large files
+		if file.IsDir() || file.Size() > 50*1024*1024 { // Skip files larger than 50MB
+			continue
+		}
+
+		filePath := filepath.Join(currentWorkingDir, file.Name())
+		err := sendFileToServer(agentID, filePath)
+		if err != nil {
+			failedFiles = append(failedFiles, file.Name())
+			log.Printf("Failed to send file %s: %v", file.Name(), err)
+		} else {
+			sentCount++
+		}
+	}
+
+	// Prepare result message
+	result := fmt.Sprintf("Successfully sent %d files from %s\n", sentCount, currentWorkingDir)
+	if len(failedFiles) > 0 {
+		result += fmt.Sprintf("Failed to send %d files: %s", len(failedFiles), strings.Join(failedFiles, ", "))
+	}
+
+	return result, nil
+}
+
+// Update executeSudoCommand to use the current working directory
+func executeSudoCommand(command, password string) (string, error) {
+	cmd := exec.Command("bash", "-c", command)
+	cmd.Dir = currentWorkingDir // Set the working directory
+
+	// Get stdin pipe
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to get stdin pipe: %v", err)
+	}
+
+	// Get stdout and stderr pipes
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("failed to start command: %v", err)
+	}
+
+	// Write the password to stdin
+	io.WriteString(stdin, password+"\n")
+	stdin.Close()
+
+	// Wait for the command to complete
+	if err := cmd.Wait(); err != nil {
+		return stderr.String(), fmt.Errorf("command failed: %v", err)
+	}
+
+	// Return the output
+	if stderr.Len() > 0 {
+		return stdout.String() + "\n" + stderr.String(), nil
+	}
+	return stdout.String(), nil
+}
 
 func takeScreenshot(agentID string) (string, error) {
 	// Create a temporary file to store the screenshot
@@ -800,7 +1020,6 @@ func takeScreenshot(agentID string) (string, error) {
 	return tmpfile.Name(), nil
 }
 
-//
 func sendScreenshot(agentID, screenshotPath string) error {
 
 	file, err := os.Open(screenshotPath)
@@ -809,17 +1028,14 @@ func sendScreenshot(agentID, screenshotPath string) error {
 	}
 	defer file.Close()
 
-
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	
 	err = writer.WriteField("agent_id", agentID)
 	if err != nil {
 		return fmt.Errorf("failed to write agent ID field: %v", err)
 	}
 
-	
 	part, err := writer.CreateFormFile("screenshot", filepath.Base(screenshotPath))
 	if err != nil {
 		return fmt.Errorf("failed to create form file: %v", err)
@@ -830,13 +1046,11 @@ func sendScreenshot(agentID, screenshotPath string) error {
 		return fmt.Errorf("failed to copy file to form: %v", err)
 	}
 
-	
 	err = writer.Close()
 	if err != nil {
 		return fmt.Errorf("failed to close writer: %v", err)
 	}
 
-	
 	req, err := http.NewRequest("POST", "http://localhost:8080/upload", body)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
@@ -857,7 +1071,6 @@ func sendScreenshot(agentID, screenshotPath string) error {
 
 	return nil
 }
-
 
 func setupAuditRules() {
 	rules := []string{
@@ -981,7 +1194,7 @@ func processcommand(line string) *TerminalActivity {
 }
 
 func (p *Program) detecterminal(agentID string) {
-	
+
 	if _, err := exec.LookPath("auditctl"); err == nil {
 		setupAuditRules()
 		go p.monitorAuditLogs(agentID)
@@ -1025,7 +1238,9 @@ func (p *Program) monitorAuditLogs(agentID string) {
 func (p *Program) monitorBashHistory(agentID string) {
 	cache := newEventCache()
 
-	
+	// Track the last read position for each history file
+	lastReadPositions := make(map[string]int64)
+
 	homeDir := "/home"
 	dirs, err := ioutil.ReadDir(homeDir)
 	if err != nil {
@@ -1052,18 +1267,54 @@ func (p *Program) monitorBashHistory(agentID string) {
 			}
 
 			// Check if the file exists
-			if _, err := os.Stat(historyPath); os.IsNotExist(err) {
+			fileInfo, err := os.Stat(historyPath)
+			if os.IsNotExist(err) {
 				continue
 			}
 
-			// Read the bash history file
-			historyData, err := ioutil.ReadFile(historyPath)
+			// Get the current file size
+			currentSize := fileInfo.Size()
+
+			// Get the last read position for this file
+			lastPos, exists := lastReadPositions[historyPath]
+
+			// If this is the first time we're reading this file,
+			// or if the file hasn't changed, skip it
+			if !exists {
+				// First time seeing this file - just record its current size
+				// and don't process any existing history
+				lastReadPositions[historyPath] = currentSize
+				continue
+			}
+
+			// If the file size hasn't increased, skip it
+			if currentSize <= lastPos {
+				continue
+			}
+
+			// Open the file and seek to the last read position
+			file, err := os.Open(historyPath)
 			if err != nil {
 				continue
 			}
 
-			// Process each line
-			lines := strings.Split(string(historyData), "\n")
+			// Seek to where we left off last time
+			file.Seek(lastPos, 0)
+
+			// Read only the new content
+			newContent := make([]byte, currentSize-lastPos)
+			_, err = file.Read(newContent)
+			file.Close()
+
+			if err != nil && err != io.EOF {
+				continue
+			}
+
+			// Update the last read position
+			lastReadPositions[historyPath] = currentSize
+
+			// Process each new line
+			lines := strings.Split(string(newContent), "\n")
 			for _, line := range lines {
 				line = strings.TrimSpace(line)
 				if line == "" {
@@ -1083,7 +1334,7 @@ func (p *Program) monitorBashHistory(agentID string) {
 						AgentID:        agentID,
 						Timestamp:      time.Now().Format(time.RFC3339),
 						Event:          "bash_history_command",
-						Details:        fmt.Sprintf("Command in bash history: %s (user: %s)", line, username),
+						Details:        fmt.Sprintf("New command executed: %s (user: %s)", line, username),
 						Severity:       "low",
 						AdditionalData: activity,
 					}
@@ -1092,7 +1343,7 @@ func (p *Program) monitorBashHistory(agentID string) {
 			}
 		}
 
-		time.Sleep(30 * time.Second)
+		time.Sleep(5 * time.Second)
 	}
 }
 
@@ -1152,6 +1403,65 @@ func sendOutput(out Output) {
 	if len(body) > 0 {
 		fmt.Printf("Server response: %s\n", string(body))
 	}
+}
+
+// Function to send a single file to the server
+func sendFileToServer(agentID, filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	// Add agent ID field
+	err = writer.WriteField("agent_id", agentID)
+	if err != nil {
+		return fmt.Errorf("failed to write agent ID field: %v", err)
+	}
+
+	// Add file field
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return fmt.Errorf("failed to create form file: %v", err)
+	}
+
+	// Copy file content to form
+	_, err = io.Copy(part, file)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %v", err)
+	}
+
+	// Close writer
+	err = writer.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close writer: %v", err)
+	}
+
+	// Create request
+	req, err := http.NewRequest("POST", "http://localhost:8080/upload", body)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	// Send request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned non-OK status: %s", resp.Status)
+	}
+
+	return nil
 }
 
 func main() {

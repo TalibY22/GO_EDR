@@ -1,11 +1,12 @@
 package main
 
 import (
-	"net/http"
-	"github.com/gin-gonic/gin"
-	"edr/Server/models"
-	"github.com/gin-contrib/cors"
 	"edr/Server/controllers"
+	"edr/Server/models"
+	"net/http"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 )
 
 var db = make(map[string]string)
@@ -63,13 +64,19 @@ func setupRouter() *gin.Engine {
 	// API routes
 	r.GET("/logs", controllers.Showlogs)
 	r.POST("/logs", controllers.StoreLogs)
+	r.DELETE("/logs/:id", controllers.DeleteLog)
+	r.DELETE("/logs/clear", controllers.ClearLogs)
+	r.GET("/bash-history", controllers.GetBashHistory)
 	r.GET("/command", controllers.ShowCommands)
 	r.POST("/command", controllers.StoreCommands)
 	r.POST("/output", controllers.RecieveOutput)
 	r.GET("/output", controllers.ShowOutput)
-	r.GET("/agents", controllers.ShowAgents)    // Fixed: GET for showing agents
-	r.POST("/agents", controllers.StoreAgents) 
-	r.POST("/upload", controllers.StoreAgents)  // Fixed: POST for storing agents
+	r.GET("/agents", controllers.ShowAgents)
+	r.POST("/agents", controllers.StoreAgents)
+	r.DELETE("/agents/:id", controllers.DeleteAgent)
+	r.GET("/agents/:id/download", controllers.DownloadAgent)
+	r.POST("/upload", controllers.StoreFiles)
+	r.GET("/files", controllers.ShowFiles)
 
 	return r
 }
