@@ -76,7 +76,7 @@ func setupRouter() *gin.Engine {
 	r.DELETE("/agents/:id", controllers.DeleteAgent)
 	r.GET("/agents/:id/download", controllers.DownloadAgent)
 	r.POST("/upload", controllers.StoreFiles)
-	r.GET("/files", controllers.ShowFiles)
+	//r.GET("/files", controllers.ShowFiles)
 
 	return r
 }
