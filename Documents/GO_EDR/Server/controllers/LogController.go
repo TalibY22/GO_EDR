@@ -146,3 +146,36 @@ func GetBashHistory(c *gin.Context) {
 		},
 	})
 }
+
+
+func GetLatestLogs(c *gin.Context) {
+	var logs []models.Log
+
+	
+	sinceID, _ := strconv.Atoi(c.DefaultQuery("since_id", "0"))
+
+	
+	eventType := c.Query("event")
+
+	
+	agentID := c.Query("agent_id")
+
+	
+	query := models.DB.Where("id > ?", sinceID)
+
+	
+	if eventType != "" {
+		query = query.Where("event = ?", eventType)
+	}
+
+	if agentID != "" {
+		query = query.Where("agent_id = ?", agentID)
+	}
+
+	
+	query.Order("id desc").Limit(50).Find(&logs)
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": logs,
+	})
+}

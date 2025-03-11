@@ -63,6 +63,7 @@ func setupRouter() *gin.Engine {
 
 	// API routes
 	r.GET("/logs", controllers.Showlogs)
+	r.GET("/logs/latest", controllers.GetLatestLogs)
 	r.POST("/logs", controllers.StoreLogs)
 	r.DELETE("/logs/:id", controllers.DeleteLog)
 	r.DELETE("/logs/clear", controllers.ClearLogs)

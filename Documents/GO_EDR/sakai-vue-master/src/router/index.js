@@ -24,6 +24,13 @@ const router = createRouter({
                     name: 'agents',
                     component: () => import('@/views/pages/agents.vue')
                 },
+
+
+                {
+                    path: '/logs',
+                    name: 'logs',
+                    component: () => import('@/views/pages/LogMonitor.vue')
+                },
                 {
                     path: '/uikit/formlayout',
                     name: 'formlayout',
