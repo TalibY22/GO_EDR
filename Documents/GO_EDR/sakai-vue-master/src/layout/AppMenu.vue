@@ -9,11 +9,41 @@ const model = ref([
         items: [
             
         { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
-        { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
+
+        { label: 'Agents', icon: 'pi pi-fw pi-home', to: '/agents' },
     
     
     ]
     },
+
+    {
+        label: 'Control server',
+        items: [
+            
+        { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
+
+        { label: 'Terminal', icon: 'pi pi-fw pi-code', to: '/terminal' },
+    
+    
+    ]
+    },
+
+
+    {
+        label: 'Files',
+        items: [
+            
+        { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
+
+        { label: 'Terminal', icon: 'pi pi-fw pi-home', to: '/terminal' },
+    
+    
+    ]
+    },
+
+
+
+    
     {
         label: 'UI Components',
         items: [
