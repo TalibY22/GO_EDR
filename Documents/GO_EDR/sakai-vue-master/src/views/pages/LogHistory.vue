@@ -1,6 +1,12 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { FilterMatchMode } from 'primevue/api';
+
+
+const FilterMatchMode = {
+    EQUALS: 'equals',
+    CONTAINS: 'contains',
+    DATE_RANGE: 'dateRange'
+};
 
 const logs = ref([]);
 const loading = ref(false);
@@ -13,7 +19,7 @@ const lazyParams = ref({
     sortOrder: -1
 });
 
-// Filter states
+
 const filters = ref({
     event: { value: null, matchMode: FilterMatchMode.EQUALS },
     agent_id: { value: null, matchMode: FilterMatchMode.EQUALS },
@@ -132,139 +138,177 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="card">
-        <div class="flex justify-between items-center mb-4">
-            <h1 class="text-2xl font-bold">Log History</h1>
-            <div class="flex gap-2">
-                <Button 
-                    icon="pi pi-filter-slash" 
-                    label="Clear Filters" 
-                    @click="clearFilters"
-                    class="p-button-outlined"
-                />
-                <Button 
-                    icon="pi pi-download" 
-                    label="Export CSV" 
-                    @click="exportCSV"
-                    class="p-button-success"
-                />
+    <div class="grid">
+        <!-- Filters Card -->
+        <div class="col-12">
+            <div class="card">
+                <div class="flex align-items-center gap-3">
+                    <div class="w-12rem">
+                        <Dropdown
+                            v-model="filters.event.value"
+                            :options="eventTypes"
+                            placeholder="Event Type"
+                            class="w-full"
+                        />
+                    </div>
+                    <div class="w-12rem">
+                        <InputText
+                            v-model="filters.agent_id.value"
+                            placeholder="Agent ID"
+                            class="w-full"
+                        />
+                    </div>
+                    <div class="w-12rem">
+                        <InputText
+                            v-model="filters.details.value"
+                            placeholder="Search Details"
+                            class="w-full"
+                        />
+                    </div>
+                    <div class="w-20rem">
+                        <Calendar
+                            v-model="filters.date_range.value"
+                            selectionMode="range"
+                            dateFormat="yy-mm-dd"
+                            showTime
+                            placeholder="Select Date Range"
+                            class="w-full"
+                            showIcon
+                        />
+                    </div>
+                    <div class="flex gap-2">
+                        <Button 
+                            icon="pi pi-search"
+                            label="Apply Filters"
+                            @click="onFilter"
+                            severity="primary"
+                            size="small"
+                        />
+                        <Button 
+                            icon="pi pi-filter-slash" 
+                            label="Clear" 
+                            @click="clearFilters"
+                            outlined
+                            size="small"
+                        />
+                    </div>
+                </div>
             </div>
         </div>
 
-        <DataTable
-            :value="logs"
-            :lazy="true"
-            :paginator="true"
-            :rows="10"
-            :total-records="totalRecords"
-            :loading="loading"
-            :filters="filters"
-            :rows-per-page-options="[10,25,50]"
-            paginator-template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
-            current-page-report-template="Showing {first} to {last} of {totalRecords} entries"
-            response-lazy-load-event="page"
-            @page="onPage"
-            @filter="onFilter"
-            striped-rows
-            class="p-datatable-lg"
-        >
-            <Column field="id" header="ID" sortable>
-                <template #body="{ data }">
-                    <span class="font-semibold">#{{ data.id }}</span>
-                </template>
-            </Column>
-
-            <Column field="event" header="Event" sortable>
-                <template #filter="{ filterModel }">
-                    <Dropdown
-                        v-model="filterModel.value"
-                        :options="eventTypes"
-                        placeholder="Select Event"
-                        class="p-column-filter"
-                        show-clear
+        <!-- Table Card -->
+        <div class="col-12">
+            <div class="card">
+                <div class="flex justify-content-between align-items-center mb-4">
+                    <h5 class="m-0">Log History</h5>
+                    <Button 
+                        icon="pi pi-download" 
+                        label="Export CSV" 
+                        @click="exportCSV"
+                        severity="success"
+                        size="small"
                     />
-                </template>
-                <template #body="{ data }">
-                    <span 
-                        :class="getSeverityClass(data.event)"
-                        class="px-2 py-1 rounded-full text-xs font-semibold"
-                    >
-                        {{ data.event }}
-                    </span>
-                </template>
-            </Column>
+                </div>
 
-            <Column field="agent_id" header="Agent ID" sortable>
-                <template #filter="{ filterModel }">
-                    <InputText
-                        v-model="filterModel.value"
-                        type="text"
-                        class="p-column-filter"
-                        placeholder="Search Agent ID"
-                    />
-                </template>
-            </Column>
+                <DataTable
+                    :value="logs"
+                    :lazy="true"
+                    :paginator="true"
+                    :rows="10"
+                    :totalRecords="totalRecords"
+                    :loading="loading"
+                    :rows-per-page-options="[10,25,50]"
+                    paginator-template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink CurrentPageReport RowsPerPageDropdown"
+                    current-page-report-template="Showing {first} to {last} of {totalRecords} entries"
+                    response-lazy-load-event="page"
+                    @page="onPage"
+                    stripedRows
+                    class="p-datatable-lg"
+                >
+                    <Column field="id" header="ID" sortable>
+                        <template #body="{ data }">
+                            <span class="font-bold">#{{ data.id }}</span>
+                        </template>
+                    </Column>
 
-            <Column field="details" header="Details" sortable>
-                <template #filter="{ filterModel }">
-                    <InputText
-                        v-model="filterModel.value"
-                        type="text"
-                        class="p-column-filter"
-                        placeholder="Search Details"
-                    />
-                </template>
-                <template #body="{ data }">
-                    <div class="whitespace-pre-wrap">{{ data.details }}</div>
-                </template>
-            </Column>
+                    <Column field="event" header="Event" sortable>
+                        <template #body="{ data }">
+                            <span 
+                                :class="getSeverityClass(data.event)"
+                                class="px-2 py-1 rounded-full text-xs font-semibold"
+                            >
+                                {{ data.event }}
+                            </span>
+                        </template>
+                    </Column>
 
-            <Column field="created_at" header="Created At" sortable>
-                <template #filter="{ filterModel }">
-                    <Calendar
-                        v-model="filterModel.value"
-                        selection-mode="range"
-                        date-format="yy-mm-dd"
-                        placeholder="Date Range"
-                        class="p-column-filter"
-                        show-time
-                    />
-                </template>
-                <template #body="{ data }">
-                    {{ new Date(data.created_at).toLocaleString() }}
-                </template>
-            </Column>
+                    <Column field="agent_id" header="Agent ID" sortable />
 
-            <Column :exportable="false" style="min-width: 8rem">
-                <template #body="{ data }">
-                    <Button
-                        icon="pi pi-copy"
-                        class="p-button-rounded p-button-text"
-                        @click="navigator.clipboard.writeText(data.details)"
-                        v-tooltip.top="'Copy Details'"
-                    />
-                </template>
-            </Column>
-        </DataTable>
+                    <Column field="details" header="Details" sortable>
+                        <template #body="{ data }">
+                            <div class="whitespace-pre-wrap">{{ data.details }}</div>
+                        </template>
+                    </Column>
+
+                    <Column field="created_at" header="Created At" sortable>
+                        <template #body="{ data }">
+                            {{ new Date(data.created_at).toLocaleString() }}
+                        </template>
+                    </Column>
+
+                    <Column :exportable="false" style="min-width: 8rem">
+                        <template #body="{ data }">
+                            <Button
+                                icon="pi pi-copy"
+                                text
+                                rounded
+                                @click="navigator.clipboard.writeText(data.details)"
+                                v-tooltip.top="'Copy Details'"
+                            />
+                        </template>
+                    </Column>
+                </DataTable>
+            </div>
+        </div>
     </div>
 </template>
 
 <style scoped>
+/* Base styles */
+.card {
+    background: var(--surface-card);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+}
+
 .p-datatable {
     margin-top: 1rem;
 }
 
-:deep(.p-column-filter) {
+:deep(.p-calendar) {
     width: 100%;
 }
 
-/* Adjust calendar width in filter */
-:deep(.p-calendar) {
-    width: 100%;
+:deep(.p-dropdown),
+:deep(.p-inputtext) {
+    height: 2.5rem;
 }
 
 /* Make details column wider */
 :deep(.p-datatable-wrapper) td:nth-child(4) {
     max-width: 400px;
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 960px) {
+    .flex.align-items-center.gap-3 {
+        flex-wrap: wrap;
+    }
+    
+    .w-12rem, .w-20rem {
+        width: 100% !important;
+        margin-bottom: 0.5rem;
+    }
 }
 </style> 

@@ -29,7 +29,7 @@ const router = createRouter({
                 {
                     path: '/logs',
                     name: 'logs',
-                    component: () => import('@/views/pages/LogMonitor.vue')
+                    component: () => import('@/views/pages/LogHistory.vue')
                 },
                 {
                     path: '/uikit/formlayout',
