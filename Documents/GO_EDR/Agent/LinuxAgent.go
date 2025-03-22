@@ -53,7 +53,7 @@ type Output struct {
 	Output        string `json:"output"`
 }
 
-// NetworkConnection represents a detected network connection
+
 type NetworkConnection struct {
 	SourceIP    string `json:"source_ip"`
 	DestIP      string `json:"dest_ip"`
@@ -988,6 +988,10 @@ func executeSudoCommand(command, password string) (string, error) {
 	return stdout.String(), nil
 }
 
+
+
+
+//Take a screenshot on the computer itself
 func takeScreenshot(agentID string) (string, error) {
 	// Create a temporary file to store the screenshot
 	tmpfile, err := ioutil.TempFile("", "screenshot-*.png")
@@ -996,8 +1000,6 @@ func takeScreenshot(agentID string) (string, error) {
 	}
 	defer tmpfile.Close()
 
-	// Use ImageMagick's import command to take a screenshot
-	// Alternatively, you can use scrot, gnome-screenshot, or other tools
 	cmd := exec.Command("import", "-window", "root", tmpfile.Name())
 	err = cmd.Run()
 
@@ -1020,6 +1022,9 @@ func takeScreenshot(agentID string) (string, error) {
 	return tmpfile.Name(), nil
 }
 
+
+
+//Function to send a sceenshot back to the C2
 func sendScreenshot(agentID, screenshotPath string) error {
 
 	file, err := os.Open(screenshotPath)
@@ -1193,6 +1198,9 @@ func processcommand(line string) *TerminalActivity {
 	return activity
 }
 
+
+
+
 func (p *Program) detecterminal(agentID string) {
 
 	if _, err := exec.LookPath("auditctl"); err == nil {
@@ -1204,6 +1212,9 @@ func (p *Program) detecterminal(agentID string) {
 	go p.monitorBashHistory(agentID)
 }
 
+
+
+//Check terminal commands 
 func (p *Program) monitorAuditLogs(agentID string) {
 	cmd := exec.Command("ausearch", "-k", "command_edr", "--start", "recent", "-i")
 
@@ -1381,6 +1392,8 @@ func sendLog(log Log) {
 	}
 }
 
+
+//Helper function
 func sendOutput(out Output) {
 	outData, err := json.Marshal(out)
 

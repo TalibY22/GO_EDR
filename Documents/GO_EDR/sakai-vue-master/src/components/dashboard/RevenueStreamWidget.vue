@@ -11,27 +11,27 @@ function setChartData() {
     const documentStyle = getComputedStyle(document.documentElement);
 
     return {
-        labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+        labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
         datasets: [
             {
                 type: 'bar',
-                label: 'Subscriptions',
+                label: 'Malware',
                 backgroundColor: documentStyle.getPropertyValue('--p-primary-400'),
-                data: [4000, 10000, 15000, 4000],
+                data: [30, 50, 20, 40],
                 barThickness: 32
             },
             {
                 type: 'bar',
-                label: 'Advertising',
+                label: 'Phishing',
                 backgroundColor: documentStyle.getPropertyValue('--p-primary-300'),
-                data: [2100, 8400, 2400, 7500],
+                data: [15, 40, 30, 25],
                 barThickness: 32
             },
             {
                 type: 'bar',
-                label: 'Affiliate',
+                label: 'Unauthorized Access',
                 backgroundColor: documentStyle.getPropertyValue('--p-primary-200'),
-                data: [4100, 5200, 3400, 7400],
+                data: [25, 35, 45, 20],
                 borderRadius: {
                     topLeft: 8,
                     topRight: 8
@@ -90,7 +90,7 @@ onMounted(() => {
 
 <template>
     <div class="card">
-        <div class="font-semibold text-xl mb-4">Revenue Stream</div>
+        <div class="font-semibold text-xl mb-4">Incident Trends</div>
         <Chart type="bar" :data="chartData" :options="chartOptions" class="h-80" />
     </div>
 </template>
