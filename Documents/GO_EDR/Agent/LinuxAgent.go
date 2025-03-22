@@ -20,7 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"bufio"
+	
 	"io"
 	"log"
 	"os/user"
@@ -193,11 +193,12 @@ func (p *Program) run() {
 		go monitorFiles(agentID, get_paths(1))
 		fmt.Printf(get_paths(1))
 		go monitorFiles(agentID, get_paths(2))
-		//  go p.monitorProcesses(agentID)
-		//go p.monitorNetworkConnections(agentID)
+		  //go p.monitorProcesses(agentID)
+		go p.monitorNetworkConnections(agentID)
 		go p.monitorDNS(agentID)
 		go p.Getcommand(agentID)
-		//go p.detecterminal(agentID)
+		go p.detecterminal(agentID)
+		//go p.monitorBashHistory(agentID)
 		go p.monitorUSBDevices(agentID)
 		//go p.detectSuspiciousProcesses(agentID)
 		go p.monitorUserBehavior(agentID)
@@ -1077,19 +1078,12 @@ func sendScreenshot(agentID, screenshotPath string) error {
 	return nil
 }
 
-func setupAuditRules() {
-	rules := []string{
-		"-a always,exit -F arch=b64 -S execve -k command_edr", // Monitor execve system calls
-		"-w /usr/bin/sudo -p x -k command_edr",                // Monitor sudo usage
-	}
 
-	for _, rule := range rules {
-		cmd := exec.Command("auditctl", "-a", rule)
-		if err := cmd.Run(); err != nil {
-			fmt.Printf("Failed to set audit rule '%s': %v\n", rule, err)
-		}
-	}
-}
+
+
+
+
+///COMAND MONITORING FUNCTIONS THIS SHIT BREAKS ALL THE TIME 
 
 func removeEmpty(s []string) []string {
 	var r []string
@@ -1101,151 +1095,233 @@ func removeEmpty(s []string) []string {
 	return r
 }
 
-// Make the terminal command nicer
+// enrichCommandInfo gathers more details about a command
 func enrichCommandInfo(activity *TerminalActivity) {
+	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", activity.ProcessID)
+	
+	// Check if the process still exists
+	if _, err := os.Stat(cmdlinePath); os.IsNotExist(err) {
+		fmt.Printf("Process %d no longer exists\n", activity.ProcessID)
+		return
+	}
 
-	cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", activity.ProcessID))
-
+	cmdline, err := os.ReadFile(cmdlinePath)
 	if err != nil {
 		fmt.Printf("Failed to read command line for PID %d: %v\n", activity.ProcessID, err)
 		return
 	}
 
-	//Split the command line into parts
+	// Split the command line into parts
 	parts := strings.Split(string(cmdline), "\x00")
-
 	parts = removeEmpty(parts)
 
 	if len(parts) == 0 {
 		return
 	}
 
-	if parts[0] == "sudo" {
+	// Extract command name from path if needed
+	baseName := filepath.Base(parts[0])
+	
+	if baseName == "sudo" && len(parts) > 1 {
 		activity.IsSudo = true
 		activity.RealUser = activity.User
 		activity.User = "root"
-		activity.RealCommand = parts[1]
-
-		activity.Args = parts[2:]
-
+		activity.Command = baseName
+		activity.RealCommand = filepath.Base(parts[1])
+		if len(parts) > 2 {
+			activity.Args = parts[2:]
+		} else {
+			activity.Args = []string{}
+		}
 	} else {
-		activity.Command = parts[0]
-		print(activity.Command)
-		activity.Args = parts[1:]
-	}
-
-	environ, _ := os.ReadFile(fmt.Sprintf("/proc/%d/environ", activity.ProcessID))
-
-	env := strings.Split(string(environ), "\x00")
-
-	for _, e := range env {
-		if strings.HasPrefix(e, "SUDO_USER=") {
-			activity.RealUser = strings.TrimPrefix(e, "SUDO_USER=")
-			break
+		activity.Command = baseName
+		if len(parts) > 1 {
+			activity.Args = parts[1:]
+		} else {
+			activity.Args = []string{}
 		}
 	}
-}
 
-// Process the command executed
-func processcommand(line string) *TerminalActivity {
-
-	if !strings.Contains(line, "SYSCALL") && !strings.Contains(line, "PATH") {
-
-		return nil
-	}
-
-	activity := &TerminalActivity{
-
-		Timestamp: time.Now(),
-	}
-
-	fields := strings.Fields(line)
-
-	for _, field := range fields {
-
-		switch {
-
-		case strings.HasPrefix(field, "exe="):
-
-			activity.Command = strings.Trim(field[4:], "\"")
-		case strings.HasPrefix(field, "pid="):
-			activity.ProcessID, _ = strconv.Atoi(field[4:])
-
-		case strings.HasPrefix(field, "uid="):
-			//Get username from uid
-			uid := field[4:]
-			if _, err := strconv.Atoi(uid); err != nil {
-				fmt.Printf("Invalid UID: %s, not a numeric value\n", uid)
-				activity.User = uid
-			} else {
-				u, err := user.LookupId(uid)
-				if err != nil {
-					fmt.Printf("Failed to get username for uid %s: %v\n", uid, err)
-					activity.User = uid
-				} else {
-					activity.User = u.Username
+	// Try to get SUDO_USER from environment if available
+	environPath := fmt.Sprintf("/proc/%d/environ", activity.ProcessID)
+	if _, err := os.Stat(environPath); !os.IsNotExist(err) {
+		environ, err := os.ReadFile(environPath)
+		if err == nil {
+			env := strings.Split(string(environ), "\x00")
+			for _, e := range env {
+				if strings.HasPrefix(e, "SUDO_USER=") {
+					activity.RealUser = strings.TrimPrefix(e, "SUDO_USER=")
+					break
 				}
 			}
+		}
+	}
+}
 
+// monitorProcessEvents uses /proc to monitor for new processes
+func (p *Program) monitorProcessEvents(agentID string) {
+	// Track processes we've already seen
+	seenPIDs := make(map[int]bool)
+	cache := newEventCache()
+
+	for {
+		// Read all processes from /proc
+		procDirs, err := os.ReadDir("/proc")
+		if err != nil {
+			fmt.Printf("Error reading /proc: %v\n", err)
+			time.Sleep(1 * time.Second)
+			continue
 		}
 
-	}
-
-	if activity.ProcessID > 0 {
-		enrichCommandInfo(activity)
-	}
-
-	return activity
-}
-
-
-
-
-func (p *Program) detecterminal(agentID string) {
-
-	if _, err := exec.LookPath("auditctl"); err == nil {
-		setupAuditRules()
-		go p.monitorAuditLogs(agentID)
-	}
-
-	// Also monitor bash history files for changes
-	go p.monitorBashHistory(agentID)
-}
-
-
-
-//Check terminal commands 
-func (p *Program) monitorAuditLogs(agentID string) {
-	cmd := exec.Command("ausearch", "-k", "command_edr", "--start", "recent", "-i")
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		fmt.Printf("Error starting monitoring of the terminal: %v\n", err)
-		return
-	}
-
-	if err := cmd.Start(); err != nil {
-		fmt.Printf("Issue running the command: %v\n", err)
-		return
-	}
-
-	scanner := bufio.NewScanner(stdout)
-
-	for scanner.Scan() {
-		if activity := processcommand(scanner.Text()); activity != nil {
-			log := Log{
-				AgentID:        agentID,
-				Timestamp:      time.Now().Format(time.RFC3339),
-				Event:          "terminal_command",
-				Details:        fmt.Sprintf("Terminal command executed: %s %s", activity.Command, strings.Join(activity.Args, " ")),
-				Severity:       "medium",
-				AdditionalData: activity,
+		for _, dir := range procDirs {
+			// Skip non-numeric directories (not processes)
+			pid, err := strconv.Atoi(dir.Name())
+			if err != nil {
+				continue
 			}
-			sendLog(log)
+
+			// Skip PIDs we've already processed
+			if _, seen := seenPIDs[pid]; seen {
+				continue
+			}
+
+			// Mark this PID as seen
+			seenPIDs[pid] = true
+
+			// Read process status to get information
+			statusFile := fmt.Sprintf("/proc/%d/status", pid)
+			
+			// Skip if the process already disappeared
+			if _, err := os.Stat(statusFile); os.IsNotExist(err) {
+				continue
+			}
+			
+			// Read process information
+			statusContent, err := os.ReadFile(statusFile)
+			if err != nil {
+				continue
+			}
+			
+			// Parse status content
+			lines := strings.Split(string(statusContent), "\n")
+			var processName string
+			var processUID string
+			
+			for _, line := range lines {
+				if strings.HasPrefix(line, "Name:") {
+					processName = strings.TrimSpace(strings.TrimPrefix(line, "Name:"))
+				} else if strings.HasPrefix(line, "Uid:") {
+					uidParts := strings.Fields(strings.TrimPrefix(line, "Uid:"))
+					if len(uidParts) > 0 {
+						processUID = uidParts[0]
+					}
+				}
+			}
+			
+			// Only process shell commands (bash, sh, zsh, etc.)
+			isShell := false
+			shellCommands := []string{"bash", "sh", "zsh", "dash", "ksh", "fish"}
+			for _, shell := range shellCommands {
+				if processName == shell {
+					isShell = true
+					break
+				}
+			}
+			
+			if !isShell {
+				continue
+			}
+			
+			// Create a terminal activity object
+			username := processUID
+			
+			// Try to convert UID to username
+			if u, err := user.LookupId(processUID); err == nil {
+				username = u.Username
+			}
+			
+			activity := &TerminalActivity{
+				Command:   processName,
+				User:      username,
+				ProcessID: pid,
+				Timestamp: time.Now(),
+			}
+			
+			// Enrich with additional info
+			enrichCommandInfo(activity)
+			
+			// Create a unique key for deduplication
+			cmdKey := fmt.Sprintf("%d_%s_%s", pid, activity.User, activity.Command)
+			if activity.RealCommand != "" {
+				cmdKey += "_" + activity.RealCommand
+			}
+			
+			if cache.shouldLog(cmdKey) {
+				commandStr := activity.Command
+				if activity.RealCommand != "" {
+					commandStr = fmt.Sprintf("%s (%s %s)", commandStr, activity.RealCommand, strings.Join(activity.Args, " "))
+				} else if len(activity.Args) > 0 {
+					commandStr = fmt.Sprintf("%s %s", commandStr, strings.Join(activity.Args, " "))
+				}
+				
+				fmt.Printf("Detected terminal command: %s (user: %s)\n", commandStr, activity.User)
+				
+				log := Log{
+					AgentID:        agentID,
+					Timestamp:      time.Now().Format(time.RFC3339),
+					Event:          "terminal_command",
+					Details:        fmt.Sprintf("Terminal command executed: %s", commandStr),
+					Severity:       "medium",
+					AdditionalData: activity,
+				}
+				sendLog(log)
+			}
 		}
+		
+		// Cleanup old PIDs that no longer exist
+		for pid := range seenPIDs {
+			procPath := fmt.Sprintf("/proc/%d", pid)
+			if _, err := os.Stat(procPath); os.IsNotExist(err) {
+				delete(seenPIDs, pid)
+			}
+		}
+		
+		// Small delay to prevent high CPU usage
+		time.Sleep(500 * time.Millisecond)
 	}
 }
 
+// Custom DirEntry implementation for root directory (for Go <1.16 compatibility)
+type fileInfoWrapper struct {
+	name  string
+	isDir bool
+}
+
+func (f *fileInfoWrapper) Name() string {
+	return f.name
+}
+
+func (f *fileInfoWrapper) Size() int64 {
+	return 0
+}
+
+func (f *fileInfoWrapper) Mode() os.FileMode {
+	return 0
+}
+
+func (f *fileInfoWrapper) ModTime() time.Time {
+	return time.Time{}
+}
+
+func (f *fileInfoWrapper) IsDir() bool {
+	return f.isDir
+}
+
+func (f *fileInfoWrapper) Sys() interface{} {
+	return nil
+}
+
+// monitorBashHistory tracks changes in bash history files
 func (p *Program) monitorBashHistory(agentID string) {
 	cache := newEventCache()
 
@@ -1253,22 +1329,33 @@ func (p *Program) monitorBashHistory(agentID string) {
 	lastReadPositions := make(map[string]int64)
 
 	homeDir := "/home"
-	dirs, err := ioutil.ReadDir(homeDir)
-	if err != nil {
-		fmt.Printf("Failed to read home directories: %v\n", err)
-		return
-	}
-
-	// Add root's home directory
-	dirs = append(dirs, &fileInfoWrapper{name: "root", isDir: true})
-
+	
 	for {
+		// Get a fresh list of directories each time
+		dirs, err := ioutil.ReadDir(homeDir)
+		if err != nil {
+			fmt.Printf("Failed to read home directories: %v\n", err)
+			time.Sleep(30 * time.Second)
+			continue
+		}
+
+		// Add root's home directory
+		dirs = append(dirs, &fileInfoWrapper{name: "root", isDir: true})
+
 		for _, dir := range dirs {
 			if !dir.IsDir() {
 				continue
 			}
 
 			username := dir.Name()
+			
+			// Skip system users
+			if strings.HasPrefix(username, "systemd-") || 
+			   username == "nobody" || 
+			   strings.HasPrefix(username, "_") {
+				continue
+			}
+			
 			var historyPath string
 
 			if username == "root" {
@@ -1277,9 +1364,10 @@ func (p *Program) monitorBashHistory(agentID string) {
 				historyPath = filepath.Join(homeDir, username, ".bash_history")
 			}
 
-			// Check if the file exists
+			// Check if the file exists and is readable
 			fileInfo, err := os.Stat(historyPath)
-			if os.IsNotExist(err) {
+			if err != nil {
+				// File doesn't exist or can't be accessed
 				continue
 			}
 
@@ -1293,8 +1381,8 @@ func (p *Program) monitorBashHistory(agentID string) {
 			// or if the file hasn't changed, skip it
 			if !exists {
 				// First time seeing this file - just record its current size
-				// and don't process any existing history
 				lastReadPositions[historyPath] = currentSize
+				fmt.Printf("Tracking bash history for user %s (size: %d)\n", username, currentSize)
 				continue
 			}
 
@@ -1303,9 +1391,12 @@ func (p *Program) monitorBashHistory(agentID string) {
 				continue
 			}
 
+			fmt.Printf("New bash history entries detected for user %s\n", username)
+
 			// Open the file and seek to the last read position
 			file, err := os.Open(historyPath)
 			if err != nil {
+				fmt.Printf("Failed to open bash history for user %s: %v\n", username, err)
 				continue
 			}
 
@@ -1318,6 +1409,7 @@ func (p *Program) monitorBashHistory(agentID string) {
 			file.Close()
 
 			if err != nil && err != io.EOF {
+				fmt.Printf("Error reading bash history for user %s: %v\n", username, err)
 				continue
 			}
 
@@ -1335,6 +1427,8 @@ func (p *Program) monitorBashHistory(agentID string) {
 				// Create a unique key for this command
 				cmdKey := fmt.Sprintf("%s_%s", username, line)
 				if cache.shouldLog(cmdKey) {
+					fmt.Printf("New bash history command for user %s: %s\n", username, line)
+					
 					activity := &TerminalActivity{
 						Command:   line,
 						User:      username,
@@ -1358,20 +1452,29 @@ func (p *Program) monitorBashHistory(agentID string) {
 	}
 }
 
-// fileInfoWrapper implements os.FileInfo for the root directory
-type fileInfoWrapper struct {
-	name  string
-	isDir bool
+// Keeping these functions for compatibility with original code
+func processcommand(line string) *TerminalActivity {
+	// This is now a legacy function, but keeping for compatibility
+	fmt.Printf("Legacy processcommand called with: %s\n", line)
+	return nil
 }
 
-func (f *fileInfoWrapper) Name() string       { return f.name }
-func (f *fileInfoWrapper) Size() int64        { return 0 }
-func (f *fileInfoWrapper) Mode() os.FileMode  { return 0 }
-func (f *fileInfoWrapper) ModTime() time.Time { return time.Time{} }
-func (f *fileInfoWrapper) IsDir() bool        { return f.isDir }
-func (f *fileInfoWrapper) Sys() interface{}   { return nil }
+func setupAuditRules() {
+	// This is now a legacy function, but keeping for compatibility
+	fmt.Println("Legacy setupAuditRules called, but not doing anything")
+}
 
-// Send data to api
+// detectTerminal starts monitoring terminal commands
+func (p *Program) detecterminal(agentID string) {
+	// Start the process monitoring (primary method)
+	go p.monitorProcessEvents(agentID)
+	fmt.Println("Process monitoring started")
+
+	// Also monitor bash history files for changes (secondary method)
+	go p.monitorBashHistory(agentID)
+	fmt.Println("Bash history monitoring started")
+}
+
 func sendLog(log Log) {
 	logData, err := json.Marshal(log)
 	if err != nil {

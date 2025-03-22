@@ -11,6 +11,9 @@ const model = ref([
         { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
 
         { label: 'Agents', icon: 'pi pi-fw pi-home', to: '/agents' },
+        { label: 'Monitor', icon: 'pi pi-fw pi-home', to: '/live' },
+        { label: 'Logs', icon: 'pi pi-fw pi-home', to: '/Logs' },
+
     
     
     ]
@@ -20,7 +23,7 @@ const model = ref([
         label: 'Control server',
         items: [
             
-        { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
+      
 
         { label: 'Terminal', icon: 'pi pi-fw pi-code', to: '/terminal' },
     
