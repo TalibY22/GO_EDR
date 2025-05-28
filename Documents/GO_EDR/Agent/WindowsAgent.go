@@ -1,4 +1,11 @@
 //WIndowsssssssss
+
+
+
+
+
+
+
 func windowslogin(agentid string,lastcheck time.Time) {
 
 

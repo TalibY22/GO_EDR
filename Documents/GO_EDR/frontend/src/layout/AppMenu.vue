@@ -9,10 +9,10 @@ const model = ref([
         items: [
             
         { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: '/' },
+{ label: 'Agents', icon: 'pi pi-fw pi-users', to: '/agents' },     // Represents multiple users or systems
+{ label: 'Monitor', icon: 'pi pi-fw pi-desktop', to: '/live' },    // Live system/desktop monitoring
+{ label: 'Logs', icon: 'pi pi-fw pi-file', to: '/logs' },          // Represents log files or documents
 
-        { label: 'Agents', icon: 'pi pi-fw pi-home', to: '/agents' },
-        { label: 'Monitor', icon: 'pi pi-fw pi-home', to: '/live' },
-        { label: 'Logs', icon: 'pi pi-fw pi-home', to: '/Logs' },
 
     
     
